@@ -1,0 +1,136 @@
+-- SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+local parryRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ParryButtonPress")
+local ballsFolder = workspace:WaitForChild("Balls")
+
+-- SETTINGS
+local AUTO_PARRY = false
+local PARRY_DISTANCE = 12
+local COOLDOWN = 0.15
+local lastParry = 0
+
+-- UI
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoParryUI"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.fromScale(0.25, 0.2)
+frame.Position = UDim2.fromScale(0.375, 0.4)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+frame.Active = true
+
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+local label = Instance.new("TextLabel", frame)
+label.Size = UDim2.fromScale(1, 0.3)
+label.Text = "Auto Parry"
+label.BackgroundTransparency = 1
+label.TextColor3 = Color3.new(1, 1, 1)
+label.Font = Enum.Font.GothamBold
+label.TextScaled = true
+
+local onButton = Instance.new("TextButton", frame)
+onButton.Size = UDim2.fromScale(0.45, 0.4)
+onButton.Position = UDim2.fromScale(0.05, 0.5)
+onButton.Text = "ON"
+onButton.BackgroundColor3 = Color3.fromRGB(40, 170, 40)
+onButton.TextColor3 = Color3.new(1, 1, 1)
+onButton.Font = Enum.Font.GothamBold
+onButton.TextScaled = true
+Instance.new("UICorner", onButton)
+
+local offButton = Instance.new("TextButton", frame)
+offButton.Size = UDim2.fromScale(0.45, 0.4)
+offButton.Position = UDim2.fromScale(0.5, 0.5)
+offButton.Text = "OFF"
+offButton.BackgroundColor3 = Color3.fromRGB(170, 40, 40)
+offButton.TextColor3 = Color3.new(1, 1, 1)
+offButton.Font = Enum.Font.GothamBold
+offButton.TextScaled = true
+Instance.new("UICorner", offButton)
+
+-- BUTTON LOGIC
+onButton.MouseButton1Click:Connect(function()
+	AUTO_PARRY = true
+end)
+
+offButton.MouseButton1Click:Connect(function()
+	AUTO_PARRY = false
+end)
+
+-- DRAGGABLE UI
+local dragging = false
+local dragStart
+local startPos
+
+local function updateDrag(input)
+	local delta = input.Position - dragStart
+	frame.Position = UDim2.new(
+		startPos.X.Scale,
+		startPos.X.Offset + delta.X,
+		startPos.Y.Scale,
+		startPos.Y.Offset + delta.Y
+	)
+end
+
+frame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+	or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = frame.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+frame.InputChanged:Connect(function(input)
+	if dragging and (
+		input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch
+	) then
+		updateDrag(input)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging then
+		updateDrag(input)
+	end
+end)
+
+-- AUTO PARRY LOOP
+RunService.Heartbeat:Connect(function()
+	if not AUTO_PARRY then return end
+	if not character or not hrp then return end
+	if tick() - lastParry < COOLDOWN then return end
+
+	for _, ball in ipairs(ballsFolder:GetChildren()) do
+		local part = ball:IsA("BasePart") and ball
+			or ball:FindFirstChildWhichIsA("BasePart")
+
+		if part then
+			local distance = (part.Position - hrp.Position).Magnitude
+			if distance <= PARRY_DISTANCE then
+				lastParry = tick()
+				parryRemote:FireServer()
+				break
+			end
+		end
+	end
+end)
